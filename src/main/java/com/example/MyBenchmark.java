@@ -1,4 +1,4 @@
-/*
+ /*
  * Copyright (c) 2014, Oracle America, Inc.
  * All rights reserved.
  *
@@ -34,6 +34,10 @@ import org.openjdk.jmh.annotations.*;
 import java.sql.*;
 import java.util.concurrent.TimeUnit;
 import java.util.Random;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.util.List;
+import java.util.ArrayList;
 
 @Fork(value = 3)
 @Warmup(iterations = 3, time = 5, timeUnit = TimeUnit.SECONDS)
@@ -90,5 +94,76 @@ public class MyBenchmark {
         rs.close();
         pstmt.close();
         return balance;
+    }
+    
+    // Main method for latency collection mode
+    public static void main(String[] args) {
+        String outputFile = args.length > 0 ? args[0] : "pgbench_results.csv";
+        int runNumber = args.length > 1 ? Integer.parseInt(args[1]) : 1;
+        int scaleParam = args.length > 2 ? Integer.parseInt(args[2]) : 5;
+        
+        System.out.println("PostgreSQL pgbench Select-Only Benchmark");
+        System.out.println("Run #" + runNumber + ", Scale: " + scaleParam);
+        
+        boolean fileExists = new java.io.File(outputFile).exists();
+        
+        try (PrintWriter writer = new PrintWriter(new FileWriter(outputFile, true))) {
+            if (!fileExists) {
+                writer.println("run,iteration,latency_ns");
+            }
+            
+            MyBenchmark benchmark = new MyBenchmark();
+            benchmark.scale = scaleParam;
+            benchmark.setup();
+            
+            // Warmup (no data collection)
+            int warmupIterations = 5000;
+            System.out.println("Warmup: " + warmupIterations + " iterations");
+            for (int i = 0; i < warmupIterations; i++) {
+                try {
+                    benchmark.selectOnlyBenchmark();
+                } catch (SQLException e) {
+                    System.err.println("Error in warmup: " + e.getMessage());
+                }
+            }
+            
+            // Measurement phase
+            int benchmarkIterations = 20000;
+            System.out.println("Measurement: " + benchmarkIterations + " iterations");
+            List<Long> latencies = new ArrayList<>();
+            
+            for (int i = 0; i < benchmarkIterations; i++) {
+                long start = System.nanoTime();
+                try {
+                    benchmark.selectOnlyBenchmark();
+                } catch (SQLException e) {
+                    System.err.println("Error in iteration " + i + ": " + e.getMessage());
+                    continue;
+                }
+                long latency = System.nanoTime() - start;
+                latencies.add(latency);
+                writer.println(runNumber + "," + i + "," + latency);
+            }
+            
+            benchmark.teardown();
+            
+            // Calculate statistics
+            latencies.sort(Long::compareTo);
+            double avg = latencies.stream().mapToLong(l -> l).average().orElse(0.0);
+            long p50 = latencies.get((int)(latencies.size() * 0.50));
+            long p95 = latencies.get((int)(latencies.size() * 0.95));
+            long p99 = latencies.get((int)(latencies.size() * 0.99));
+            
+            System.out.println("\n=== Results ===");
+            System.out.println("Avg: " + String.format("%.2f", avg / 1000) + " μs");
+            System.out.println("P50: " + String.format("%.2f", p50 / 1000.0) + " μs");
+            System.out.println("P95: " + String.format("%.2f", p95 / 1000.0) + " μs");
+            System.out.println("P99: " + String.format("%.2f", p99 / 1000.0) + " μs");
+            
+        } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
     }
 }
