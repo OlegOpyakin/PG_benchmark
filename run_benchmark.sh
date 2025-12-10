@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-NUM_RUNS=3
+NUM_RUNS=1
 SCALE=5
 
 mkdir -p results

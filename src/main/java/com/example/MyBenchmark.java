@@ -128,7 +128,7 @@ public class MyBenchmark {
             }
             
             // Measurement phase
-            int benchmarkIterations = 20000;
+            int benchmarkIterations = 1_000_000;
             System.out.println("Measurement: " + benchmarkIterations + " iterations");
             List<Long> latencies = new ArrayList<>();
             
